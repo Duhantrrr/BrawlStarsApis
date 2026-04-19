@@ -1,103 +1,89 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
+import os
 
 app = Flask(__name__)
-# Bu satır, HTML sitenin sunucuya bağlanmasına izin verir (CORS Çözümü)
+# Tarayıcıdan (HTML'den) gelen isteklerin engellenmemesi için CORS aktif
 CORS(app)
 
 # --- AYARLAR ---
-# Buraya en son aldığın veya IP'yi bulduktan sonra alacağın Token'ı yapıştır
-TOKEN = "SENİN_TOKEN_BURAYA"
+# Yeni verdiğin token buraya işlendi
+TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6IjI4YTMxOGY3LTAwMDAtYTFlYi03ZmExLTJjNzQzM2M2Y2NhNSJ9.eyJpc3MiOiJzdXBlcmNlbGwiLCJhdWQiOiJzdXBlcmNlbGw6Z2FtZWFwaSIsImp0aSI6ImMyMmMxNWE0LTA3ZWYtNGIzOC1hYzczLWY0MWFkNmVjMzAwYSIsImlhdCI6MTc3NjU5MDQxNSwic3ViIjoiZGV2ZWxvcGVyLzdiNjg0ZTYzLTUyYzUtZDM4Yi0zMzAxLTE3MjkxNGVhMDgwNyIsInNjb3BlcyI6WyJicmF3bHN0YXJzIl0sImxpbWl0cyI6W3sidGllciI6ImRldmVsb3Blci9zaWx2ZXIiLCJ0eXBlIjoidGhyb3R0bGluZyJ9LHsiY2lkcnMiOlsiNzQuMjIwLjQ4LjIwMiJdLCJ0eXBlIjoiY2xpZW50In1dfQ.sg0UTi7Q2pjAJNakj_jPmJaRdzsbShmLKpwla1_Tlfd3mBWWip-THI0IbovDyMyKvtpWMHGthYaNQSZBX2VW0Q"
 BASE_URL = "https://api.brawlstars.com/v1"
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/json"
 }
 
-# --- SUNUCU IP ADRESİNİ LOGLARA YAZDIRMA ---
-# Render'da çalıştırdığında bu kısım sana Supercell'e girmen gereken IP'yi söyleyecek
+# Sunucu IP adresini doğrulamak için (Render loglarında görünür)
 try:
-    sunucu_ip = requests.get('https://api.ipify.org').text
-    print("\n" + "="*50)
-    print(f"S1 TAG API SUNUCU IP ADRESİ: {sunucu_ip}")
-    print("BU IP'YI DEVELOPER PORTAL'A EKLEMEYİ UNUTMA!")
-    print("="*50 + "\n")
-except Exception as e:
-    print(f"IP Adresi sorgulanırken hata oluştu: {e}")
+    current_ip = requests.get('https://api.ipify.org').text
+    print(f"\n--- SUNUCU IP ADRESI: {current_ip} ---")
+except:
+    pass
 
-# Yardımcı Fonksiyon: Tag formatını düzeltir (# -> %23)
 def format_tag(tag):
     return f"%23{tag.strip().replace('#', '')}"
 
-# --- 1. DURUM KONTROLÜ (IP'yi Tarayıcıda Görmek İçin) ---
+# 1. SUNUCU DURUMU (Test için)
 @app.route('/')
-def status():
-    try:
-        ip = requests.get('https://api.ipify.org').text
-        return jsonify({
-            "status": "Online",
-            "message": "S1 Tag API Sunucusu Çalışıyor",
-            "server_ip": ip
-        })
-    except:
-        return "Sunucu Aktif ama IP alınamadı."
+def home():
+    return jsonify({
+        "status": "S1 Tag API Aktif",
+        "ip_address": "74.220.48.202"
+    })
 
-# --- 2. OYUNCU VE BATTLELOG METODU ---
-@app.route('/api/player/<tag>', methods=['GET'])
+# 2. OYUNCU VE MAÇ GEÇMİŞİ
+@app.route('/api/player/<tag>')
 def get_player(tag):
     p_tag = format_tag(tag)
-    # Oyuncu Profili
-    player_req = requests.get(f"{BASE_URL}/players/{p_tag}", headers=HEADERS)
-    # Savaş Günlüğü (Son 25 maç)
-    log_req = requests.get(f"{BASE_URL}/players/{p_tag}/battlelog", headers=HEADERS)
+    player_res = requests.get(f"{BASE_URL}/players/{p_tag}", headers=HEADERS)
+    log_res = requests.get(f"{BASE_URL}/players/{p_tag}/battlelog", headers=HEADERS)
     
-    if player_req.status_code != 200:
-        return jsonify({"error": "Oyuncu bulunamadı", "code": player_req.status_code}), player_req.status_code
+    if player_res.status_code != 200:
+        return jsonify({"error": "Oyuncu bulunamadı", "status": player_res.status_code}), player_res.status_code
         
     return jsonify({
-        "info": player_req.json(),
-        "battle_log": log_req.json().get('items', [])
+        "info": player_res.json(),
+        "battle_log": log_res.json().get('items', [])
     })
 
-# --- 3. KLAN (CLUB) METODLARI ---
-@app.route('/api/club/<tag>', methods=['GET'])
+# 3. KLAN BİLGİLERİ VE ÜYELERİ
+@app.route('/api/club/<tag>')
 def get_club(tag):
     c_tag = format_tag(tag)
-    # Klan Genel Bilgileri
-    club_req = requests.get(f"{BASE_URL}/clubs/{c_tag}", headers=HEADERS)
-    # Klan Üye Listesi
-    members_req = requests.get(f"{BASE_URL}/clubs/{c_tag}/members", headers=HEADERS)
+    club_res = requests.get(f"{BASE_URL}/clubs/{c_tag}", headers=HEADERS)
+    members_res = requests.get(f"{BASE_URL}/clubs/{c_tag}/members", headers=HEADERS)
     
-    if club_req.status_code != 200:
-        return jsonify({"error": "Klan bulunamadı"}), club_req.status_code
+    if club_res.status_code != 200:
+        return jsonify({"error": "Klan bulunamadı"}), club_res.status_code
         
     return jsonify({
-        "club_info": club_req.json(),
-        "members": members_req.json().get('items', [])
+        "club_info": club_res.json(),
+        "members": members_res.json().get('items', [])
     })
 
-# --- 4. SIRALAMA (RANKINGS) METODLARI ---
-@app.route('/api/rankings/<country>/players', methods=['GET'])
-def get_player_rankings(country):
-    # Örn: country='global' veya 'TR'
-    res = requests.get(f"{BASE_URL}/rankings/{country}/players", headers=HEADERS)
+# 4. SIRALAMALAR (Oyuncu veya Klan)
+@app.route('/api/rankings/<country>/<type>')
+def get_rankings(country, type):
+    # type: 'players' veya 'clubs' | country: 'global' veya 'TR'
+    url = f"{BASE_URL}/rankings/{country}/{type}"
+    res = requests.get(url, headers=HEADERS)
     return jsonify(res.json())
 
-# --- 5. ETKİNLİKLER (EVENTS) METODU ---
-@app.route('/api/events', methods=['GET'])
+# 5. AKTİF ETKİNLİKLER (Harita Rotasyonu)
+@app.route('/api/events')
 def get_events():
     res = requests.get(f"{BASE_URL}/events/rotation", headers=HEADERS)
     return jsonify(res.json())
 
-# --- 6. TÜM KARAKTERLER (BRAWLERS) METODU ---
-@app.route('/api/brawlers', methods=['GET'])
+# 6. TÜM KARAKTERLER
+@app.route('/api/brawlers')
 def get_brawlers():
     res = requests.get(f"{BASE_URL}/brawlers", headers=HEADERS)
     return jsonify(res.json())
 
 if __name__ == '__main__':
-    # Render'da çalışması için port 5000 veya çevre değişkeninden kapaılmalıdır
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
