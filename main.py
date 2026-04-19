@@ -3,50 +3,70 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-CORS(app)  # Domaininden gelen isteklere izin verir
+# Bu satır, HTML sitenin sunucuya bağlanmasına izin verir (CORS Çözümü)
+CORS(app)
 
 # --- AYARLAR ---
-TOKEN = "SENİN_ÇALIŞAN_TOKENIN"
+# Buraya en son aldığın veya IP'yi bulduktan sonra alacağın Token'ı yapıştır
+TOKEN = "SENİN_TOKEN_BURAYA"
 BASE_URL = "https://api.brawlstars.com/v1"
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/json"
 }
 
-# Yardımcı Fonksiyon: Etiketi API formatına getirir (# -> %23)
+# --- SUNUCU IP ADRESİNİ LOGLARA YAZDIRMA ---
+# Render'da çalıştırdığında bu kısım sana Supercell'e girmen gereken IP'yi söyleyecek
+try:
+    sunucu_ip = requests.get('https://api.ipify.org').text
+    print("\n" + "="*50)
+    print(f"S1 TAG API SUNUCU IP ADRESİ: {sunucu_ip}")
+    print("BU IP'YI DEVELOPER PORTAL'A EKLEMEYİ UNUTMA!")
+    print("="*50 + "\n")
+except Exception as e:
+    print(f"IP Adresi sorgulanırken hata oluştu: {e}")
+
+# Yardımcı Fonksiyon: Tag formatını düzeltir (# -> %23)
 def format_tag(tag):
     return f"%23{tag.strip().replace('#', '')}"
 
-# --- 1. OYUNCU METODLARI ---
+# --- 1. DURUM KONTROLÜ (IP'yi Tarayıcıda Görmek İçin) ---
+@app.route('/')
+def status():
+    try:
+        ip = requests.get('https://api.ipify.org').text
+        return jsonify({
+            "status": "Online",
+            "message": "S1 Tag API Sunucusu Çalışıyor",
+            "server_ip": ip
+        })
+    except:
+        return "Sunucu Aktif ama IP alınamadı."
 
+# --- 2. OYUNCU VE BATTLELOG METODU ---
 @app.route('/api/player/<tag>', methods=['GET'])
-def get_player_full(tag):
-    """Oyuncu profili ve son 25 maçını birlikte getirir."""
+def get_player(tag):
     p_tag = format_tag(tag)
-    
-    # Profil verisi
+    # Oyuncu Profili
     player_req = requests.get(f"{BASE_URL}/players/{p_tag}", headers=HEADERS)
-    # Maç geçmişi (Battlelog)
+    # Savaş Günlüğü (Son 25 maç)
     log_req = requests.get(f"{BASE_URL}/players/{p_tag}/battlelog", headers=HEADERS)
     
     if player_req.status_code != 200:
-        return jsonify({"error": "Oyuncu bulunamadı"}), player_req.status_code
+        return jsonify({"error": "Oyuncu bulunamadı", "code": player_req.status_code}), player_req.status_code
         
     return jsonify({
         "info": player_req.json(),
         "battle_log": log_req.json().get('items', [])
     })
 
-# --- 2. KLAN (CLUB) METODLARI ---
-
+# --- 3. KLAN (CLUB) METODLARI ---
 @app.route('/api/club/<tag>', methods=['GET'])
 def get_club(tag):
-    """Klan bilgilerini ve klan üyelerini getirir."""
     c_tag = format_tag(tag)
-    
-    # Klan genel bilgileri
+    # Klan Genel Bilgileri
     club_req = requests.get(f"{BASE_URL}/clubs/{c_tag}", headers=HEADERS)
-    # Klan üyeleri
+    # Klan Üye Listesi
     members_req = requests.get(f"{BASE_URL}/clubs/{c_tag}/members", headers=HEADERS)
     
     if club_req.status_code != 200:
@@ -57,38 +77,27 @@ def get_club(tag):
         "members": members_req.json().get('items', [])
     })
 
-# --- 3. SIRALAMA (RANKINGS) METODLARI ---
-
+# --- 4. SIRALAMA (RANKINGS) METODLARI ---
 @app.route('/api/rankings/<country>/players', methods=['GET'])
 def get_player_rankings(country):
-    """Ülke bazlı veya küresel oyuncu sıralaması (country='global' veya 'TR')."""
+    # Örn: country='global' veya 'TR'
     res = requests.get(f"{BASE_URL}/rankings/{country}/players", headers=HEADERS)
     return jsonify(res.json())
 
-@app.route('/api/rankings/<country>/clubs', methods=['GET'])
-def get_club_rankings(country):
-    """Ülke bazlı veya küresel klan sıralaması."""
-    res = requests.get(f"{BASE_URL}/rankings/{country}/clubs", headers=HEADERS)
-    return jsonify(res.json())
-
-# --- 4. ETKİNLİK (EVENTS) METODLARI ---
-
+# --- 5. ETKİNLİKLER (EVENTS) METODU ---
 @app.route('/api/events', methods=['GET'])
 def get_events():
-    """Şu an aktif olan haritaları ve modları getirir."""
     res = requests.get(f"{BASE_URL}/events/rotation", headers=HEADERS)
     return jsonify(res.json())
 
-# --- 5. BRAWLERS (KARAKTERLER) ---
-
+# --- 6. TÜM KARAKTERLER (BRAWLERS) METODU ---
 @app.route('/api/brawlers', methods=['GET'])
-def get_all_brawlers():
-    """Oyundaki tüm karakterlerin listesini ve özelliklerini getirir."""
+def get_brawlers():
     res = requests.get(f"{BASE_URL}/brawlers", headers=HEADERS)
     return jsonify(res.json())
 
-# --- SERVER BAŞLATMA ---
-
 if __name__ == '__main__':
-    # Geliştirme aşamasında debug=True, yayına alırken False yapmalısın.
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Render'da çalışması için port 5000 veya çevre değişkeninden kapaılmalıdır
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
